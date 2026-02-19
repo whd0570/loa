@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로아 상급 융화 재료 계산기</title>
+    <style>
+        :root {
+            --bg-color: #212529;
+            --card-bg: #2c3035;
+            --primary: #5c7cfa;
+            --text-color: #f8f9fa;
+            --border-color: #495057;
+            --highlight: #ffd43b;
+        }
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 500px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        select, input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #343a40;
+            color: white;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: 0.2s;
+        }
+        .btn:hover {
+            filter: brightness(1.1);
+        }
+        .result-box {
+            margin-top: 25px;
+            padding: 20px;
+            background-color: #343a40;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            display: none; /* 초기엔 숨김 */
+        }
+        .result-title {
+            font-size: 1.2rem;
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
+        .highlight {
+            color: var(--highlight);
+            font-weight: bold;
+        }
+        .sub-text {
+            font-size: 0.8rem;
+            color: #adb5bd;
+            text-align: center;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🛠️ 상급 아비도스 제작 계산기</h1>
+
+    <div class="form-group">
+        <label>생활 종류 선택</label>
+        <select id="lifeType" onchange="updateLabels()">
+            <option value="foraging">🌱 채집 (들꽃)</option>
+            <option value="logging">🪓 벌목 (목재)</option>
+            <option value="hunting">🥩 수렵 (생고기)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label id="label-t4" class="highlight">아비도스 들꽃 (4티어)</label>
+        <input type="number" id="input-t4" placeholder="보유 수량 입력" min="0">
+    </div>
+
+    <div class="form-group">
+        <label id="label-rare" style="color:#4dabf7">수줍은 들꽃 (3티어 희귀)</label>
+        <input type="number" id="input-rare" placeholder="보유 수량 입력" min="0">
+    </div>
+
+    <div class="form-group">
+        <label id="label-normal">들꽃 (3티어 일반)</label>
+        <input type="number" id="input-normal" placeholder="보유 수량 입력" min="0">
+    </div>
+
+    <button class="btn" onclick="calculate()">계산하기</button>
+
+    <div class="result-box" id="resultArea">
+        <div class="result-title">
+            최대 <span class="highlight" id="maxCrafts">0</span>회 제작 가능
+        </div>
+        
+        <div style="margin-bottom:15px;">
+            <label style="color:#adb5bd; border-bottom:1px solid #495057; padding-bottom:5px;">📋 1단계: 인벤토리에 남길 재료</label>
+            <div class="result-row">
+                <span id="res-keep-normal-name">일반 재료</span>
+                <span id="res-keep-normal-val">0개</span>
+            </div>
+            <div class="result-row">
+                <span id="res-keep-rare-name">희귀 재료</span>
+                <span id="res-keep-rare-val">0개</span>
+            </div>
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label style="color:#adb5bd; border-bottom:1px solid #495057; padding-bottom:5px;">♻️ 2단계: 가루로 교환할 재료</label>
+            <div class="result-row">
+                <span id="res-conv-normal-name">남은 일반 재료</span>
+                <span class="highlight" id="res-conv-normal-val">0개</span>
+            </div>
+            <div class="result-row">
+                <span id="res-conv-rare-name">남은 희귀 재료</span>
+                <span class="highlight" id="res-conv-rare-val">0개</span>
+            </div>
+        </div>
+
+        <div>
+            <label style="color:#adb5bd; border-bottom:1px solid #495057; padding-bottom:5px;">🛒 3단계: 가루로 구매</label>
+            <div class="result-row">
+                <span>구매할 4티어 재료</span>
+                <span class="highlight" id="res-buy-t4">0개</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="sub-text">
+        * 계산 로직: (3티어 일반→0.8가루), (3티어 희귀→1.6가루) 환산 가치 적용<br>
+        * 실제 게임 내 교환 단위(10개/100개)에 따라 소량의 오차가 있을 수 있습니다.
+    </div>
+</div>
+
+<script>
+    // 재료 데이터
+    const labels = {
+        foraging: { t4: "아비도스 들꽃", rare: "수줍은 들꽃", normal: "들꽃" },
+        logging: { t4: "아비도스 목재", rare: "부드러운 목재", normal: "목재" },
+        hunting: { t4: "아비도스 두툼한 생고기", rare: "다듬은 생고기", normal: "두툼한 생고기" }
+    };
+
+    // 제작 필요량
+    const REQ = { t4: 43, rare: 59, normal: 112 };
+    
+    // 가루 환산 가치 (1개당 가루 가치)
+    // 일반 100개 = 80가루 -> 개당 0.8
+    // 희귀 50개 = 80가루 -> 개당 1.6
+    // 4티어 구매비용: 10개 = 100가루 -> 개당 10가루 소모
+    const VAL = { normal: 0.8, rare: 1.6, t4_cost: 10 };
+
+    // 1회 제작시 소모되는 총 '가루 가치'
+    // (43 * 10) + (59 * 1.6) + (112 * 0.8) = 430 + 94.4 + 89.6 = 614
+    const COST_PER_CRAFT = (REQ.t4 * VAL.t4_cost) + (REQ.rare * VAL.rare) + (REQ.normal * VAL.normal);
+
+    function updateLabels() {
+        const type = document.getElementById('lifeType').value;
+        document.getElementById('label-t4').innerText = labels[type].t4 + " (4티어)";
+        document.getElementById('label-rare').innerText = labels[type].rare + " (3티어 희귀)";
+        document.getElementById('label-normal').innerText = labels[type].normal + " (3티어 일반)";
+    }
+
+    function calculate() {
+        const type = document.getElementById('lifeType').value;
+        
+        // 입력값 가져오기
+        const hasT4 = Number(document.getElementById('input-t4').value) || 0;
+        const hasRare = Number(document.getElementById('input-rare').value) || 0;
+        const hasNormal = Number(document.getElementById('input-normal').value) || 0;
+
+        // 1. 보유 재료의 총 가치 계산 (전부 가루로 바꿨을 때 + 보유 T4의 가치)
+        // 주의: T4는 분해가 안되지만, 계산 편의상 가치 총량으로 최대 N을 구하기 위함
+        const totalValue = (hasT4 * VAL.t4_cost) + (hasRare * VAL.rare) + (hasNormal * VAL.normal);
+
+        // 2. 이론상 최대 제작 횟수
+        let maxCrafts = Math.floor(totalValue / COST_PER_CRAFT);
+
+        // 3. 현실적 제약 조건 확인 (병목 현상 체크)
+        // 4티어는 가루로 살 수 있지만, 3티어는 보유량 내에서 써야 함 (역교환 불가 가정)
+        // 즉, 내가 가진 3티어 일반/희귀 재료가 maxCrafts 횟수만큼은 버텨줘야 함.
+        const limitByNormal = Math.floor(hasNormal / REQ.normal);
+        const limitByRare = Math.floor(hasRare / REQ.rare);
+
+        // 최종 제작 횟수는 [가치기반 최대치]와 [보유 3티어 한계치] 중 작은 값
+        maxCrafts = Math.min(maxCrafts, limitByNormal, limitByRare);
+
+        // 4. 결과 도출
+        const neededNormal = maxCrafts * REQ.normal;
+        const neededRare = maxCrafts * REQ.rare;
+        const neededT4 = maxCrafts * REQ.t4;
+
+        // 남겨야 할 것
+        const keepNormal = neededNormal;
+        const keepRare = neededRare;
+
+        // 교환할 것 (남는거)
+        const convertNormal = hasNormal - keepNormal;
+        const convertRare = hasRare - keepRare;
+
+        // 구매해야 할 T4
+        const buyT4 = Math.max(0, neededT4 - hasT4);
+
+        // UI 출력
+        document.getElementById('resultArea').style.display = 'block';
+        document.getElementById('maxCrafts').innerText = maxCrafts;
+
+        // 이름 업데이트
+        document.getElementById('res-keep-normal-name').innerText = labels[type].normal + " 유지";
+        document.getElementById('res-keep-rare-name').innerText = labels[type].rare + " 유지";
+        document.getElementById('res-conv-normal-name').innerText = "남는 " + labels[type].normal + " 교환";
+        document.getElementById('res-conv-rare-name').innerText = "남는 " + labels[type].rare + " 교환";
+
+        // 수치 업데이트 (천단위 콤마)
+        document.getElementById('res-keep-normal-val').innerText = keepNormal.toLocaleString() + "개";
+        document.getElementById('res-keep-rare-val').innerText = keepRare.toLocaleString() + "개";
+        document.getElementById('res-conv-normal-val').innerText = convertNormal.toLocaleString() + "개";
+        document.getElementById('res-conv-rare-val').innerText = convertRare.toLocaleString() + "개";
+        
+        document.getElementById('res-buy-t4').innerText = labels[type].t4 + " " + buyT4.toLocaleString() + "개 구매";
+    }
+
+    // 초기 실행
+    updateLabels();
+</script>
+
+</body>
+</html>
