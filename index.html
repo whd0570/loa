@@ -83,7 +83,7 @@
             background-color: #343a40;
             border-radius: 12px;
             border: 1px solid var(--border-color);
-            display: none; /* 초기엔 숨김 */
+            display: none;
         }
         .result-title {
             font-size: 1.2rem;
@@ -107,6 +107,7 @@
             color: #adb5bd;
             text-align: center;
             margin-top: 15px;
+            line-height: 1.4;
         }
     </style>
 </head>
@@ -159,13 +160,13 @@
         </div>
 
         <div style="margin-bottom:15px;">
-            <label style="color:#adb5bd; border-bottom:1px solid #495057; padding-bottom:5px;">♻️ 2단계: 가루로 교환할 재료</label>
+            <label style="color:#adb5bd; border-bottom:1px solid #495057; padding-bottom:5px;">♻️ 2단계: 가루로 교환할 재료 (정확한 단위)</label>
             <div class="result-row">
-                <span id="res-conv-normal-name">남은 일반 재료</span>
+                <span id="res-conv-normal-name">일반 재료 교환</span>
                 <span class="highlight" id="res-conv-normal-val">0개</span>
             </div>
             <div class="result-row">
-                <span id="res-conv-rare-name">남은 희귀 재료</span>
+                <span id="res-conv-rare-name">희귀 재료 교환</span>
                 <span class="highlight" id="res-conv-rare-val">0개</span>
             </div>
         </div>
@@ -180,31 +181,17 @@
     </div>
     
     <div class="sub-text">
-        * 계산 로직: (3티어 일반→0.8가루), (3티어 희귀→1.6가루) 환산 가치 적용<br>
-        * 실제 게임 내 교환 단위(10개/100개)에 따라 소량의 오차가 있을 수 있습니다.
+        * 인게임 교환 비율 완벽 적용 (일반 100단위, 희귀 50단위 교환)<br>
+        * 가치가 낮은 '일반 재료'부터 우선적으로 가루로 교환하도록 설계되었습니다.
     </div>
 </div>
 
 <script>
-    // 재료 데이터
     const labels = {
         foraging: { t4: "아비도스 들꽃", rare: "수줍은 들꽃", normal: "들꽃" },
         logging: { t4: "아비도스 목재", rare: "부드러운 목재", normal: "목재" },
         hunting: { t4: "아비도스 두툼한 생고기", rare: "다듬은 생고기", normal: "두툼한 생고기" }
     };
-
-    // 제작 필요량
-    const REQ = { t4: 43, rare: 59, normal: 112 };
-    
-    // 가루 환산 가치 (1개당 가루 가치)
-    // 일반 100개 = 80가루 -> 개당 0.8
-    // 희귀 50개 = 80가루 -> 개당 1.6
-    // 4티어 구매비용: 10개 = 100가루 -> 개당 10가루 소모
-    const VAL = { normal: 0.8, rare: 1.6, t4_cost: 10 };
-
-    // 1회 제작시 소모되는 총 '가루 가치'
-    // (43 * 10) + (59 * 1.6) + (112 * 0.8) = 430 + 94.4 + 89.6 = 614
-    const COST_PER_CRAFT = (REQ.t4 * VAL.t4_cost) + (REQ.rare * VAL.rare) + (REQ.normal * VAL.normal);
 
     function updateLabels() {
         const type = document.getElementById('lifeType').value;
@@ -216,63 +203,82 @@
     function calculate() {
         const type = document.getElementById('lifeType').value;
         
-        // 입력값 가져오기
         const hasT4 = Number(document.getElementById('input-t4').value) || 0;
         const hasRare = Number(document.getElementById('input-rare').value) || 0;
         const hasNormal = Number(document.getElementById('input-normal').value) || 0;
 
-        // 1. 보유 재료의 총 가치 계산 (전부 가루로 바꿨을 때 + 보유 T4의 가치)
-        // 주의: T4는 분해가 안되지만, 계산 편의상 가치 총량으로 최대 N을 구하기 위함
-        const totalValue = (hasT4 * VAL.t4_cost) + (hasRare * VAL.rare) + (hasNormal * VAL.normal);
+        const REQ = { t4: 43, rare: 59, normal: 112 };
 
-        // 2. 이론상 최대 제작 횟수
-        let maxCrafts = Math.floor(totalValue / COST_PER_CRAFT);
+        // 3티어 재료 한계치로 최대 가능한 제작 횟수 상한선 구하기
+        const maxLimit = Math.min(
+            Math.floor(hasNormal / REQ.normal), 
+            Math.floor(hasRare / REQ.rare)
+        );
 
-        // 3. 현실적 제약 조건 확인 (병목 현상 체크)
-        // 4티어는 가루로 살 수 있지만, 3티어는 보유량 내에서 써야 함 (역교환 불가 가정)
-        // 즉, 내가 가진 3티어 일반/희귀 재료가 maxCrafts 횟수만큼은 버텨줘야 함.
-        const limitByNormal = Math.floor(hasNormal / REQ.normal);
-        const limitByRare = Math.floor(hasRare / REQ.rare);
+        let bestCrafts = 0;
+        let finalConvertNormal = 0;
+        let finalConvertRare = 0;
+        let finalBuyT4 = 0;
+        let keepNormal = 0;
+        let keepRare = 0;
 
-        // 최종 제작 횟수는 [가치기반 최대치]와 [보유 3티어 한계치] 중 작은 값
-        maxCrafts = Math.min(maxCrafts, limitByNormal, limitByRare);
+        // 상한선부터 0회까지 내려가면서 가장 먼저 조건이 맞는 횟수 찾기
+        for (let i = maxLimit; i >= 0; i--) {
+            const neededNormal = i * REQ.normal;
+            const neededRare = i * REQ.rare;
+            const neededT4 = i * REQ.t4;
 
-        // 4. 결과 도출
-        const neededNormal = maxCrafts * REQ.normal;
-        const neededRare = maxCrafts * REQ.rare;
-        const neededT4 = maxCrafts * REQ.t4;
+            const leftoverNormal = hasNormal - neededNormal;
+            const leftoverRare = hasRare - neededRare;
 
-        // 남겨야 할 것
-        const keepNormal = neededNormal;
-        const keepRare = neededRare;
+            // 게임 내 교환 묶음 (일반 100개, 희귀 50개)
+            const maxNormalBatches = Math.floor(leftoverNormal / 100);
+            const maxRareBatches = Math.floor(leftoverRare / 50);
 
-        // 교환할 것 (남는거)
-        const convertNormal = hasNormal - keepNormal;
-        const convertRare = hasRare - keepRare;
+            // 부족한 4티어 재료 수량 (10개 단위로 구매해야 함)
+            const deficitT4 = Math.max(0, neededT4 - hasT4);
+            const buyBatchesT4 = Math.ceil(deficitT4 / 10);
+            
+            // 1번 구매(10개)당 100가루 필요
+            const powderNeeded = buyBatchesT4 * 100; 
+            
+            // 1번 교환(묶음)당 80가루 획득
+            const powderBatchesNeeded = Math.ceil(powderNeeded / 80); 
 
-        // 구매해야 할 T4
-        const buyT4 = Math.max(0, neededT4 - hasT4);
+            // 남는 재료를 가루로 바꿨을 때 구매가 가능한지 확인
+            if (maxNormalBatches + maxRareBatches >= powderBatchesNeeded) {
+                bestCrafts = i;
+                keepNormal = neededNormal;
+                keepRare = neededRare;
+
+                // 일반 재료를 우선적으로 교환하여 희귀 재료를 아낌
+                let useNormalBatches = Math.min(powderBatchesNeeded, maxNormalBatches);
+                let useRareBatches = powderBatchesNeeded - useNormalBatches;
+
+                finalConvertNormal = useNormalBatches * 100;
+                finalConvertRare = useRareBatches * 50;
+                finalBuyT4 = buyBatchesT4 * 10;
+                break;
+            }
+        }
 
         // UI 출력
         document.getElementById('resultArea').style.display = 'block';
-        document.getElementById('maxCrafts').innerText = maxCrafts;
+        document.getElementById('maxCrafts').innerText = bestCrafts;
 
-        // 이름 업데이트
         document.getElementById('res-keep-normal-name').innerText = labels[type].normal + " 유지";
         document.getElementById('res-keep-rare-name').innerText = labels[type].rare + " 유지";
-        document.getElementById('res-conv-normal-name').innerText = "남는 " + labels[type].normal + " 교환";
-        document.getElementById('res-conv-rare-name').innerText = "남는 " + labels[type].rare + " 교환";
+        document.getElementById('res-conv-normal-name').innerText = labels[type].normal + " 교환";
+        document.getElementById('res-conv-rare-name').innerText = labels[type].rare + " 교환";
 
-        // 수치 업데이트 (천단위 콤마)
         document.getElementById('res-keep-normal-val').innerText = keepNormal.toLocaleString() + "개";
         document.getElementById('res-keep-rare-val').innerText = keepRare.toLocaleString() + "개";
-        document.getElementById('res-conv-normal-val').innerText = convertNormal.toLocaleString() + "개";
-        document.getElementById('res-conv-rare-val').innerText = convertRare.toLocaleString() + "개";
+        document.getElementById('res-conv-normal-val').innerText = finalConvertNormal.toLocaleString() + "개";
+        document.getElementById('res-conv-rare-val').innerText = finalConvertRare.toLocaleString() + "개";
         
-        document.getElementById('res-buy-t4').innerText = labels[type].t4 + " " + buyT4.toLocaleString() + "개 구매";
+        document.getElementById('res-buy-t4').innerText = labels[type].t4 + " " + finalBuyT4.toLocaleString() + "개 구매";
     }
 
-    // 초기 실행
     updateLabels();
 </script>
 
